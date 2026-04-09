@@ -132,25 +132,38 @@ async function loadIdentity() {
     });
 }
 
+
+
 /**
- * Build embeddable PPTX viewer URL from a sharing link
- * Priority:
- * 1. Native provider preview (Google Drive / OneDrive)
- * 2. Office Online Viewer fallback
+ * Build embeddable viewer URL for documents
  */
-function buildPptxEmbedUrl(rawUrl) {
+function buildFileViewerUrl(rawUrl, type = 'pdf') {
   if (!rawUrl || typeof rawUrl !== 'string') return null;
   const url = rawUrl.trim();
   if (!/^https?:\/\//i.test(url)) return null;
 
   try {
-    // For OneDrive (and any valid PPTX URL) use Office Online Viewer
     const encodedSrc = encodeURIComponent(url);
-    return `https://view.officeapps.live.com/op/embed.aspx?src=${encodedSrc}`;
+    if (type === 'pptx') {
+      // Use Office Online Viewer for PPTX
+      return `https://view.officeapps.live.com/op/embed.aspx?src=${encodedSrc}`;
+    } else {
+      // Use Google Docs Viewer for PDFs as a stable fallback/previewer
+      return `https://docs.google.com/viewer?url=${encodedSrc}&embedded=true`;
+    }
   } catch (_) {
     return null;
   }
 }
+
+
+/**
+ * Force download for Cloudinary URLs (Note: raw files don't support fl_attachment via URL)
+ */
+function getDownloadUrl(url) {
+  return url || '';
+}
+
 
 /** Fetch dashboard data (classes + units). Fallback: if dashboard-data fails, use classes only. */
 async function getDashboardData() {
@@ -404,32 +417,52 @@ router.on('/lesson/:id', async (lessonId) => {
       window.StudentActivity.recordLessonVisit(lesson.id);
     }
 
-    // Process PPTX, Videos and Images
+    // Process Files, Videos and Images
     let mediaHTML = '';
 
-    // Interactive PowerPoint viewer
-    if (lesson.pptx_url) {
-      const embedUrl = buildPptxEmbedUrl(lesson.pptx_url);
-      if (embedUrl) {
+    if (lesson.files && lesson.files.length > 0) {
+      mediaHTML += `<div class="lesson-files-section" style="margin: 2rem 0;">
+        <h3 style="margin-bottom: 1rem; color: var(--text-dark); display: flex; align-items: center; gap: 0.5rem;">
+          <i class="fas fa-file-download" style="color: var(--primary);"></i> ملفات الدرس
+        </h3>
+        <div style="display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
+      `;
+      
+      lesson.files.forEach(file => {
+        const icon = file.file_type === 'pptx' ? 'fa-file-powerpoint' : 'fa-file-pdf';
+        const color = file.file_type === 'pptx' ? '#ea580c' : '#dc2626';
+        
+        // Use document viewers for the "Open" button to ensure they render correctly
+        let openUrl = file.url;
+        const viewerUrl = buildFileViewerUrl(file.url, file.file_type);
+        if (viewerUrl) openUrl = viewerUrl;
+
+        const downloadUrl = getDownloadUrl(file.url);
+        
         mediaHTML += `
-          <div style="margin: 2rem 0; border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-lg); background:#fff;">
-            <iframe src="${embedUrl}"
-                    width="100%"
-                    height="600"
-                    frameborder="0"
-                    allowfullscreen
-                    style="border:0;"></iframe>
+          <div style="background: white; border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <div style="display: flex; align-items: flex-start; gap: 1rem;">
+              <div style="font-size: 2rem; color: ${color};">
+                <i class="fas ${icon}"></i>
+              </div>
+              <div style="flex: 1; overflow: hidden;">
+                <h4 style="margin: 0 0 0.25rem 0; color: var(--text-dark); font-size: 1.1rem; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(file.title || 'ملف مرفق')}</h4>
+                ${file.description ? `<p style="margin: 0; font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${escapeHtml(file.description)}</p>` : ''}
+              </div>
+            </div>
+            <div style="display: flex; gap: 0.5rem; margin-top: auto;">
+              <a href="${escapeHtml(openUrl)}" target="_blank" class="btn btn-primary" style="flex: 1; padding: 0.5rem; display: flex; justify-content: center; align-items: center; gap: 0.5rem; font-size: 0.9rem; text-decoration: none;">
+                <i class="fas fa-external-link-alt"></i> فتح
+              </a>
+              <a href="${escapeHtml(downloadUrl)}" download class="btn btn-secondary" style="flex: 1; padding: 0.5rem; display: flex; justify-content: center; align-items: center; gap: 0.5rem; font-size: 0.9rem; border: 1px solid var(--border-light); color: var(--text-dark); text-decoration: none; background: #f8fafc;">
+                <i class="fas fa-download"></i> تحميل
+              </a>
+            </div>
           </div>
         `;
-      } else {
-        mediaHTML += `
-          <div style="margin: 2rem 0; padding:1.25rem; border-radius: var(--radius-md); border:1px solid var(--border-light); background:#fff;">
-            <p style="margin:0; color:var(--text-muted); font-weight:600;">
-              The PPTX cannot be previewed. Please check the OneDrive link.
-            </p>
-          </div>
-        `;
-      }
+      });
+      
+      mediaHTML += `</div></div>`;
     }
 
     if (lesson.videos?.length) {

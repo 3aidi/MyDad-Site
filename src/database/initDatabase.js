@@ -122,6 +122,8 @@ async function initializeDatabase() {
           video_position TEXT DEFAULT 'top',
           video_size TEXT DEFAULT 'large',
           video_explanation TEXT,
+          pptx_url TEXT,
+          pdf_url TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (unit_id) REFERENCES units(id) ON DELETE CASCADE
         )
@@ -137,6 +139,8 @@ async function initializeDatabase() {
           video_position TEXT DEFAULT 'top',
           video_size TEXT DEFAULT 'large',
           video_explanation TEXT,
+          pptx_url TEXT,
+          pdf_url TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (unit_id) REFERENCES units(id) ON DELETE CASCADE
         )
@@ -144,7 +148,37 @@ async function initializeDatabase() {
     }
     console.log('✓ Lessons table created');
 
-    console.log('✓ Lessons table created');
+    // Create Files table
+    if (isPostgres) {
+      await db.run(`
+        CREATE TABLE IF NOT EXISTS files (
+          id SERIAL PRIMARY KEY,
+          lesson_id INTEGER NOT NULL,
+          file_type TEXT NOT NULL,
+          url TEXT NOT NULL,
+          title TEXT,
+          description TEXT,
+          display_order INTEGER DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (lesson_id) REFERENCES lessons(id) ON DELETE CASCADE
+        )
+      `);
+    } else {
+      await db.run(`
+        CREATE TABLE IF NOT EXISTS files (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          lesson_id INTEGER NOT NULL,
+          file_type TEXT NOT NULL,
+          url TEXT NOT NULL,
+          title TEXT,
+          description TEXT,
+          display_order INTEGER DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (lesson_id) REFERENCES lessons(id) ON DELETE CASCADE
+        )
+      `);
+    }
+    console.log('✓ Files table created');
 
     // MIGRATION: Ensure new columns exist even if tables existed
     try {
@@ -161,6 +195,7 @@ async function initializeDatabase() {
         await safeAlter("ALTER TABLE units ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'P'", 'category to units');
         await safeAlter("ALTER TABLE units ADD COLUMN IF NOT EXISTS term TEXT DEFAULT '1'", 'term to units');
         await safeAlter('ALTER TABLE lessons ADD COLUMN IF NOT EXISTS pptx_url TEXT', 'pptx_url to lessons');
+        await safeAlter('ALTER TABLE lessons ADD COLUMN IF NOT EXISTS pdf_url TEXT', 'pdf_url to lessons');
       } else {
         // SQLite: Try adding columns, ignore if they exist
         const safeAlter = async (sql) => {
@@ -170,7 +205,8 @@ async function initializeDatabase() {
         await safeAlter('ALTER TABLE units ADD COLUMN display_order INTEGER DEFAULT 0');
         await safeAlter("ALTER TABLE units ADD COLUMN category TEXT DEFAULT 'P'");
         await safeAlter("ALTER TABLE units ADD COLUMN term TEXT DEFAULT '1'");
-         await safeAlter('ALTER TABLE lessons ADD COLUMN pptx_url TEXT');
+        await safeAlter('ALTER TABLE lessons ADD COLUMN pptx_url TEXT');
+        await safeAlter('ALTER TABLE lessons ADD COLUMN pdf_url TEXT');
       }
       console.log('✓ Schema migration verified');
     } catch (err) {

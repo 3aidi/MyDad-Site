@@ -3,28 +3,28 @@ const db = require('../database/database');
 const { authenticateToken } = require('../middleware/auth');
 const { parsePositiveInteger } = require('../utils/validation');
 const multer = require('multer');
-const cloudinary = require('cloudinary').v2;
-const streamifier = require('streamifier');
+const path = require('path');
+const fs = require('fs');
 
 const router = express.Router();
 
-// Configure Cloudinary with environment variables
-if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
-  cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET
-  });
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('✓ Cloudinary configured');
+const localUploadStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../public/uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
   }
-} else {
-  console.warn('⚠ Cloudinary credentials not configured - image uploads will fail');
-}
+});
 
-// Configure multer for image uploads (memory storage for Cloudinary)
+// Configure multer for image uploads (local storage)
 const upload = multer({
-  storage: multer.memoryStorage(),
+  storage: localUploadStorage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: (req, file, cb) => {
     const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -62,10 +62,11 @@ router.get('/:id', async (req, res) => {
       return res.status(400).json({ error: 'Invalid lesson id' });
     }
     const id = parsed.value;
-    const [lesson, videos, images] = await Promise.all([
+    const [lesson, videos, images, files] = await Promise.all([
       db.get('SELECT * FROM lessons WHERE id = ?', [id]),
       db.all('SELECT id, lesson_id, video_url, position, size, explanation FROM videos WHERE lesson_id = ? ORDER BY display_order ASC', [id]).catch(() => []),
-      db.all('SELECT id, lesson_id, image_path, position, size, caption FROM images WHERE lesson_id = ? ORDER BY display_order ASC', [id]).catch(() => [])
+      db.all('SELECT id, lesson_id, image_path, position, size, caption FROM images WHERE lesson_id = ? ORDER BY display_order ASC', [id]).catch(() => []),
+      db.all('SELECT id, lesson_id, file_type, url, title, description FROM files WHERE lesson_id = ? ORDER BY display_order ASC', [id]).catch(() => [])
     ]);
 
     if (!lesson) {
@@ -75,7 +76,8 @@ router.get('/:id', async (req, res) => {
     res.json({
       ...lesson,
       videos: videos || [],
-      images: images || []
+      images: images || [],
+      files: files || []
     });
   } catch (error) {
     console.error('Error in GET /api/lessons/:id:', error.message);
@@ -103,7 +105,7 @@ router.get('/', authenticateToken, async (req, res) => {
 // ADMIN: Create lesson
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { title, unit_id, content, videos, images, pptxUrl } = req.body;
+    const { title, unit_id, content, videos, images, files } = req.body;
 
     if (!title || title.trim() === '') {
       return res.status(400).json({
@@ -151,8 +153,8 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 
     const result = await db.run(
-      'INSERT INTO lessons (title, unit_id, content, pptx_url) VALUES (?, ?, ?, ?)',
-      [trimmed, unit_idNum, content || '', pptxUrl || null]
+      'INSERT INTO lessons (title, unit_id, content, pptx_url, pdf_url) VALUES (?, ?, ?, ?, ?)',
+      [trimmed, unit_idNum, content || '', null, null]
     );
 
     // Insert videos if provided
@@ -181,12 +183,26 @@ router.post('/', authenticateToken, async (req, res) => {
       }
     }
 
-    const [newLesson, lessonsVideos, lessonsImages] = await Promise.all([
+    // Insert files if provided
+    if (files && Array.isArray(files)) {
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        if (f.url) {
+          await db.run(
+            'INSERT INTO files (lesson_id, file_type, url, title, description, display_order) VALUES (?, ?, ?, ?, ?, ?)',
+            [result.id, f.file_type || 'pdf', f.url, f.title || '', f.description || '', i]
+          );
+        }
+      }
+    }
+
+    const [newLesson, lessonsVideos, lessonsImages, lessonsFiles] = await Promise.all([
       db.get('SELECT * FROM lessons WHERE id = ?', [result.id]),
       db.all('SELECT id, lesson_id, video_url, position, size, explanation FROM videos WHERE lesson_id = ? ORDER BY display_order ASC', [result.id]),
-      db.all('SELECT id, lesson_id, image_path, position, size, caption FROM images WHERE lesson_id = ? ORDER BY display_order ASC', [result.id])
+      db.all('SELECT id, lesson_id, image_path, position, size, caption FROM images WHERE lesson_id = ? ORDER BY display_order ASC', [result.id]),
+      db.all('SELECT id, lesson_id, file_type, url, title, description FROM files WHERE lesson_id = ? ORDER BY display_order ASC', [result.id])
     ]);
-    res.status(201).json({ ...newLesson, videos: lessonsVideos || [], images: lessonsImages || [] });
+    res.status(201).json({ ...newLesson, videos: lessonsVideos || [], images: lessonsImages || [], files: lessonsFiles || [] });
   } catch (error) {
     console.error('Error creating lesson:', error);
     res.status(500).json({ error: 'Server error' });
@@ -201,7 +217,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid lesson id' });
     }
     const id = idParsed.value;
-    const { title, unit_id, content, videos, images, pptxUrl } = req.body;
+    const { title, unit_id, content, videos, images, files } = req.body;
     const unitIdParsed = parsePositiveInteger(unit_id);
     if (!unitIdParsed.valid) {
       return res.status(400).json({ error: 'الوحدة الدراسية مطلوبة', code: 'UNIT_ID_REQUIRED' });
@@ -245,19 +261,11 @@ router.put('/:id', authenticateToken, async (req, res) => {
       });
     }
 
-    // Preserve existing PPTX unless a new one is provided
-    const existingRow = await db.get('SELECT pptx_url FROM lessons WHERE id = ?', [id]);
-    const existingPptxUrl = existingRow ? existingRow.pptx_url : null;
-    const newPptxUrl =
-      typeof pptxUrl === 'string' && pptxUrl.trim()
-        ? pptxUrl.trim()
-        : existingPptxUrl;
-
     let result;
     try {
       result = await db.run(
-        'UPDATE lessons SET title = ?, unit_id = ?, content = ?, pptx_url = ? WHERE id = ?',
-        [trimmedTitle, unit_idNum, content || '', newPptxUrl || null, id]
+        'UPDATE lessons SET title = ?, unit_id = ?, content = ?, pptx_url = NULL, pdf_url = NULL WHERE id = ?',
+        [trimmedTitle, unit_idNum, content || '', id]
       );
     } catch (updateError) {
       console.error('[ERROR] Lesson update failed:', updateError.message);
@@ -324,12 +332,39 @@ router.put('/:id', authenticateToken, async (req, res) => {
       }
     }
 
-    const [updatedLesson, lessonsVideos, lessonsImages] = await Promise.all([
+    // Handle files: delete old ones and insert new ones
+    if (files && Array.isArray(files)) {
+      try {
+        try {
+          await db.run('DELETE FROM files WHERE lesson_id = ?', [id]);
+        } catch (delErr) {
+          if (process.env.NODE_ENV !== 'production') {
+            console.warn('Could not delete old files:', delErr.message);
+          }
+        }
+
+        // Insert new files
+        for (let i = 0; i < files.length; i++) {
+          const f = files[i];
+          if (f.url) {
+            await db.run(
+              'INSERT INTO files (lesson_id, file_type, url, title, description, display_order) VALUES (?, ?, ?, ?, ?, ?)',
+              [id, f.file_type || 'pdf', f.url, f.title || '', f.description || '', i]
+            );
+          }
+        }
+      } catch (fileError) {
+        console.error('[ERROR] File processing failed:', fileError.message);
+      }
+    }
+
+    const [updatedLesson, lessonsVideos, lessonsImages, lessonsFiles] = await Promise.all([
       db.get('SELECT * FROM lessons WHERE id = ?', [id]),
       db.all('SELECT id, lesson_id, video_url, position, size, explanation FROM videos WHERE lesson_id = ? ORDER BY display_order ASC', [id]).catch(() => []),
-      db.all('SELECT id, lesson_id, image_path, position, size, caption FROM images WHERE lesson_id = ? ORDER BY display_order ASC', [id]).catch(() => [])
+      db.all('SELECT id, lesson_id, image_path, position, size, caption FROM images WHERE lesson_id = ? ORDER BY display_order ASC', [id]).catch(() => []),
+      db.all('SELECT id, lesson_id, file_type, url, title, description FROM files WHERE lesson_id = ? ORDER BY display_order ASC', [id]).catch(() => [])
     ]);
-    res.json({ ...updatedLesson, videos: lessonsVideos || [], images: lessonsImages || [] });
+    res.json({ ...updatedLesson, videos: lessonsVideos || [], images: lessonsImages || [], files: lessonsFiles || [] });
   } catch (error) {
     console.error('[ERROR] Lesson update failed:', error.message);
     res.status(500).json({ error: 'حدث خطأ في تحديث الدرس' });
@@ -342,35 +377,10 @@ router.post('/upload-image', authenticateToken, upload.single('image'), async (r
     if (!req.file) {
       return res.status(400).json({ error: 'لم يتم توفير ملف صورة', code: 'NO_FILE' });
     }
-
-    // Validate Cloudinary configuration
-    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
-      console.error('[SECURITY] Cloudinary credentials not configured');
-      return res.status(500).json({ error: 'خطأ في إعدادات الخادم', code: 'CONFIG_ERROR' });
-    }
-
-    const uploadFromBuffer = () => new Promise((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder: 'educational-content-system/lesson-images',
-          resource_type: 'image'
-        },
-        (error, result) => {
-          if (error) {
-            console.error('[ERROR] Cloudinary upload failed:', error.message);
-            return reject(error);
-          }
-          resolve(result);
-        }
-      );
-
-      streamifier.createReadStream(req.file.buffer).pipe(uploadStream);
-    });
-
-    const result = await uploadFromBuffer();
-    res.json({ imagePath: result.secure_url });
+    const publicPath = `/uploads/${req.file.filename}`;
+    res.json({ imagePath: publicPath });
   } catch (error) {
-    console.error('[ERROR] Image upload failed:', error.message);
+    console.error('[ERROR] Image upload failed:', error);
     res.status(500).json({
       error: 'فشل تحميل الصورة',
       code: 'UPLOAD_ERROR'

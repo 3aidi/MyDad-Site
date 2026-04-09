@@ -3,6 +3,11 @@ const config = {
   // API base URL - change this for production
   API_BASE_URL: window.location.origin,
 
+  // Cloudinary configuration for PDF uploads (unsigned/public only — NO secrets here)
+  // Get your cloud name from: https://console.cloudinary.com/
+  CLOUDINARY_CLOUD_NAME: 'dm0srrhnh',
+  CLOUDINARY_UPLOAD_PRESET: 'pdfuploader',
+
   // Centralized identity configuration (single source of truth)
   IDENTITY: {
     // Official school name

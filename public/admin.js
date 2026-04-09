@@ -1779,11 +1779,10 @@ window.showCreateLessonForm = async function () {
           <small style="color: #64748b; display: block; margin-top: 0.5rem;">رفع صور من جهازك مع نص توضيحي لكل صورة</small>
         </div>
         <div class="form-group">
-          <label for="lesson-pptx-url"><i class="fas fa-file-powerpoint"></i> رابط عرض PowerPoint (اختياري)</label>
-          <input type="url" id="lesson-pptx-url" placeholder="رابط من Google Drive أو OneDrive أو Dropbox..." dir="ltr" style="width: 100%; padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px;">
-          <small style="color: #64748b; display: block; margin-top: 0.5rem;">
-            أدخل رابط مشاركة لملف PowerPoint من Google Drive أو OneDrive أو Dropbox. سيتم فتح العرض مباشرة داخل صفحة الدرس.
-          </small>
+          <label><i class="fas fa-file-alt"></i> الملفات المرفقة (PDF / PPTX) (اختياري)</label>
+          <div id="files-container"></div>
+          <button type="button" class="btn btn-secondary btn-sm" data-action="add-file-field">+ إضافة ملف</button>
+          <small style="color: #64748b; display: block; margin-top: 0.5rem;">رفع ملفات بصيغة PDF أو مسودات PowerPoint مع عنوان ووصف.</small>
         </div>
         <div style="color: #ef4444; margin: 1rem 0; padding: 0.75rem; background: #fee2e2; border-radius: 4px; display: none;" id="lesson-error">
           <i class="fas fa-exclamation-circle"></i> <span id="lesson-error-msg"></span>
@@ -1852,15 +1851,15 @@ window.showCreateLessonForm = async function () {
   // Initialize with one empty video field
   window.videoFieldCount = 0;
   window.imageFieldCount = 0;
+  window.fileFieldCount = 0;
   addVideoField();
+  addFileField();
 
   document.getElementById('create-lesson-form').addEventListener('submit', async (e) => {
     e.preventDefault();
 
     const title = titleInput.value.trim();
     const unitId = document.getElementById('lesson-unit').value;
-    const pptxUrlInput = document.getElementById('lesson-pptx-url');
-    const pptxUrl = pptxUrlInput ? pptxUrlInput.value.trim() : '';
 
     if (!title) {
       errorDiv.style.display = 'block';
@@ -1870,12 +1869,6 @@ window.showCreateLessonForm = async function () {
     if (!unitId) {
       errorDiv.style.display = 'block';
       errorMsg.textContent = 'الوحدة الدراسية مطلوبة';
-      return;
-    }
-    // Optional PPTX URL validation
-    if (pptxUrl && !/^https?:\/\/.+/i.test(pptxUrl)) {
-      errorDiv.style.display = 'block';
-      errorMsg.textContent = 'رابط PowerPoint غير صالح. يرجى إدخال رابط OneDrive صحيح.';
       return;
     }
 
@@ -1917,13 +1910,27 @@ window.showCreateLessonForm = async function () {
         }
       });
 
+      const files = [];
+      const fileElements = document.querySelectorAll('#files-container [data-file-index]');
+      fileElements.forEach(el => {
+        const url = el.querySelector('.file-url-input').value;
+        if (url) {
+          files.push({
+            url: url,
+            file_type: el.querySelector('.file-type-input').value,
+            title: el.querySelector('.file-title-input').value,
+            description: el.querySelector('.file-desc-input').value
+          });
+        }
+      });
+
       await adminApi.post('/api/lessons', {
         title,
         unit_id: unitId,
         content: '',
         videos: videos,
         images: images,
-        pptxUrl: pptxUrl || null
+        files: files
       });
       modal.remove();
       router.navigate('/admin/lessons');
@@ -2035,6 +2042,114 @@ window.uploadImage = async function (input, event) {
   }
 };
 
+window.fileFieldCount = 0;
+window.editFileFieldCount = 0;
+
+window.addFileField = function (fileData = { file_type: 'pdf', url: '', title: '', description: '' }, isEdit = false) {
+  const containerId = isEdit ? 'edit-files-container' : 'files-container';
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  const countVar = isEdit ? 'editFileFieldCount' : 'fileFieldCount';
+  const index = window[countVar]++;
+  
+  const fieldId = `file-block-${Date.now()}-${index}`;
+  const fileBlock = document.createElement('div');
+  fileBlock.setAttribute('data-file-index', index);
+  fileBlock.id = fieldId;
+  fileBlock.style.cssText = 'background: #f8fafc; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #e2e8f0;';
+  
+  let currentUrl = fileData.url || '';
+  
+  fileBlock.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+      <label style="font-weight: 600;">الملف ${index + 1} (PDF / PPTX)</label>
+      <button type="button" class="btn btn-danger btn-xs" data-action="remove-file-block">حذف</button>
+    </div>
+    <input type="text" placeholder="عنوان الملف (مثال: ملخص الوحدة)..." value="${escapeHtml(fileData.title || '')}" class="file-title-input" style="width: 100%; padding: 0.5rem; margin-bottom: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px;">
+    
+    <div class="file-upload-section" style="margin-bottom: 0.5rem;">
+      ${currentUrl ? `
+        <div style="margin-bottom: 0.5rem; font-size: 0.9em; background: #e2e8f0; padding: 0.5rem; border-radius: 4px;">
+          <a href="${currentUrl}" target="_blank">عرض الملف الحالي</a> ✓
+        </div>
+      ` : ''}
+      <input type="file" accept=".pdf,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation" class="lesson-file-upload" style="width: 100%; padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px;" onchange="if(this.files[0]) window.uploadFileAjax(this.files[0], '${fieldId}')">
+      <input type="hidden" class="file-url-input" value="${currentUrl}">
+      <input type="hidden" class="file-type-input" value="${escapeHtml(fileData.file_type || 'pdf')}">
+      <div class="file-upload-status" style="margin-top: 0.5rem; font-weight: bold; font-size: 0.9em;"></div>
+    </div>
+    
+    <textarea placeholder="وصف الملف..." class="file-desc-input" style="width: 100%; padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px; min-height: 40px; resize: vertical;">${escapeHtml(fileData.description || '')}</textarea>
+  `;
+  container.appendChild(fileBlock);
+};
+
+window.addEditFileField = function(url='', file_type='pdf', title='', description='') {
+  window.addFileField({url, file_type, title, description}, true);
+};
+
+window.uploadFileAjax = async function (file, blockId) {
+  const block = document.getElementById(blockId);
+  if (!block) return;
+  const statusDiv = block.querySelector('.file-upload-status');
+  const urlInput = block.querySelector('.file-url-input');
+  const typeInput = block.querySelector('.file-type-input');
+  const titleInput = block.querySelector('.file-title-input');
+
+  const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf';
+  const isPptx = file.name.toLowerCase().endsWith('.pptx') || file.type === 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+  
+  if (!isPdf && !isPptx) {
+    showAlert('الرجاء اختيار ملف PDF أو PPTX صحيح', 'error');
+    if(statusDiv) statusDiv.textContent = '❌ صيغة ملف غير مدعومة';
+    return;
+  }
+  
+  const fileType = isPdf ? 'pdf' : 'pptx';
+  typeInput.value = fileType;
+  
+  if (!titleInput.value) {
+     titleInput.value = file.name;
+  }
+
+  statusDiv.textContent = 'جارٍ رفع الملف إلى السحابة...';
+  statusDiv.style.color = '#eab308'; // yellow text
+
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const CLOUD_NAME = (window.APP_CONFIG && window.APP_CONFIG.CLOUDINARY_CLOUD_NAME) || 'YOUR_CLOUD_NAME';
+    const UPLOAD_PRESET = (window.APP_CONFIG && window.APP_CONFIG.CLOUDINARY_UPLOAD_PRESET) || 'pdfuploader';
+    const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/raw/upload`;
+
+    formData.append('upload_preset', UPLOAD_PRESET);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error?.message || 'فشل رفع الملف إلى السحابة');
+    }
+
+    urlInput.value = data.secure_url;
+    statusDiv.textContent = '✔ تم رفع الملف بنجاح!';
+    statusDiv.style.color = '#10b981'; // green text
+    showAlert('تم رفع الملف بنجاح!');
+  } catch (error) {
+    console.error('File upload error:', error);
+    statusDiv.textContent = '❌ فشل الرفع: ' + error.message;
+    statusDiv.style.color = '#ef4444'; // red text
+    urlInput.value = '';
+    showAlert('خطأ في رفع الملف: ' + error.message, 'error');
+  }
+};
+
 // (PPTX upload removed) - we now accept only external PPTX URLs in the form
 
 window.editLesson = async function (id) {
@@ -2109,11 +2224,10 @@ window.editLesson = async function (id) {
           <small style="color: #64748b; display: block; margin-top: 0.5rem;">رفع صور من جهازك مع نص توضيحي لكل صورة</small>
         </div>
         <div class="form-group">
-          <label for="edit-lesson-pptx-url"><i class="fas fa-file-powerpoint"></i> رابط عرض PowerPoint (اختياري)</label>
-          <input type="url" id="edit-lesson-pptx-url" value="${lesson.pptx_url || ''}" placeholder="رابط من Google Drive أو OneDrive أو Dropbox..." dir="ltr" style="width: 100%; padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px;">
-          <small style="color: #64748b; display: block; margin-top: 0.5rem;">
-            أدخل أو عدّل رابط مشاركة PowerPoint ليتم عرضه مباشرة داخل صفحة الدرس.
-          </small>
+          <label><i class="fas fa-file-alt"></i> الملفات المرفقة (PDF / PPTX) (اختياري)</label>
+          <div id="edit-files-container"></div>
+          <button type="button" class="btn btn-secondary btn-sm" data-action="add-edit-file-field">+ إضافة ملف</button>
+          <small style="color: #64748b; display: block; margin-top: 0.5rem;">رفع ملفات بصيغة PDF أو مسودات PowerPoint مع عنوان ووصف.</small>
         </div>
           <div style="color: #ef4444; margin: 1rem 0; padding: 0.75rem; background: #fee2e2; border-radius: 4px; display: none;" id="edit-lesson-error">
             <i class="fas fa-exclamation-circle"></i> <span id="edit-lesson-error-msg"></span>
@@ -2133,7 +2247,6 @@ window.editLesson = async function (id) {
     const titleInput = document.getElementById('edit-lesson-title');
     const errorDiv = document.getElementById('edit-lesson-error');
     const errorMsg = document.getElementById('edit-lesson-error-msg');
-    const pptxHiddenInput = document.getElementById('edit-lesson-pptx-url');
 
     const unitsForForm = allUnits;
 
@@ -2182,6 +2295,7 @@ window.editLesson = async function (id) {
     // Initialize videos and images
     window.editVideoFieldCount = 0;
     window.editImageFieldCount = 0;
+    window.editFileFieldCount = 0;
     if (lesson.videos && lesson.videos.length > 0) {
       lesson.videos.forEach((video, idx) => {
         addEditVideoField(video.video_url, video.position, video.size, video.explanation);
@@ -2196,12 +2310,19 @@ window.editLesson = async function (id) {
       });
     }
 
+    if (lesson.files && lesson.files.length > 0) {
+      lesson.files.forEach((file) => {
+        addEditFileField(file.url, file.file_type, file.title, file.description);
+      });
+    } else {
+      addEditFileField();
+    }
+
     document.getElementById('edit-lesson-form').addEventListener('submit', async (e) => {
       e.preventDefault();
 
       const title = titleInput.value.trim();
       const unitId = document.getElementById('edit-lesson-unit').value;
-      const pptxUrl = pptxHiddenInput ? pptxHiddenInput.value.trim() : '';
 
       if (!title) {
         errorDiv.style.display = 'block';
@@ -2211,11 +2332,6 @@ window.editLesson = async function (id) {
       if (!unitId) {
         errorDiv.style.display = 'block';
         errorMsg.textContent = 'الوحدة الدراسية مطلوبة';
-        return;
-      }
-      if (pptxUrl && !/^https?:\/\/.+/i.test(pptxUrl)) {
-        errorDiv.style.display = 'block';
-        errorMsg.textContent = 'رابط PowerPoint غير صالح. يرجى إدخال رابط OneDrive صحيح.';
         return;
       }
 
@@ -2258,13 +2374,27 @@ window.editLesson = async function (id) {
           }
         });
 
+        const files = [];
+        const fileElements = document.querySelectorAll('#edit-files-container [data-file-index]');
+        fileElements.forEach(el => {
+          const url = el.querySelector('.file-url-input').value;
+          if (url && url.trim()) {
+            files.push({
+              url: url,
+              file_type: el.querySelector('.file-type-input').value,
+              title: el.querySelector('.file-title-input').value,
+              description: el.querySelector('.file-desc-input').value
+            });
+          }
+        });
+
         await adminApi.put(`/api/lessons/${id}`, {
           title,
           unit_id: unitId,
           content: '',
           videos: videos,
           images: images,
-          pptxUrl: pptxUrl || null
+          files: files
         });
         modal.remove();
         router.navigate('/admin/lessons');
@@ -2795,14 +2925,20 @@ document.addEventListener('click', (e) => {
   }
   if (action === 'add-video-field') { addVideoField(); return; }
   if (action === 'add-image-field') { addImageField(); return; }
+  if (action === 'add-file-field') { addFileField(); return; }
   if (action === 'add-edit-video-field') { addEditVideoField(); return; }
   if (action === 'add-edit-image-field') { addEditImageField(); return; }
+  if (action === 'add-edit-file-field') { window.addEditFileField(); return; }
   if (action === 'remove-video-block') {
     el.closest('[data-video-index]')?.remove();
     return;
   }
   if (action === 'remove-image-block') {
     el.closest('[data-image-index]')?.remove();
+    return;
+  }
+  if (action === 'remove-file-block') {
+    el.closest('[data-file-index]')?.remove();
     return;
   }
   if (action === 'add-question') {

@@ -166,7 +166,8 @@ app.use(helmet({
       scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
       imgSrc: ["'self'", "data:", "https:", "http:"],
-      connectSrc: ["'self'"]
+      connectSrc: ["'self'", "https://api.cloudinary.com"],
+      frameSrc: ["'self'", "https://www.youtube.com", "https://view.officeapps.live.com", "https://res.cloudinary.com"]
     }
   } : false,
   crossOriginEmbedderPolicy: false
@@ -296,14 +297,17 @@ app.use((err, req, res, next) => {
 });
 
 // Graceful shutdown handler
+let httpServer;
 process.on('SIGTERM', () => {
   console.log('SIGTERM signal received: closing HTTP server');
-  app.close(() => {
-    console.log('HTTP server closed');
-    if (db.close) {
-      db.close();
-    }
-  });
+  if (httpServer) {
+    httpServer.close(() => {
+      console.log('HTTP server closed');
+      if (db.close) {
+        db.close();
+      }
+    });
+  }
 });
 
 // Initialize DB then start server
@@ -311,7 +315,7 @@ initializeDatabase().then(() => {
   // Check tables
   return ensureTablesExist();
 }).then(() => {
-  app.listen(PORT, () => {
+  httpServer = app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`Admin panel: http://localhost:${PORT}/admin/login`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);

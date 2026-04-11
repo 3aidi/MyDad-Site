@@ -17,6 +17,7 @@ const db = require('./src/database/database');
 const initializeDatabase = require('./src/database/initDatabase');
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -171,7 +172,7 @@ app.use(helmet({
 
 // Rate Limiting
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, 
+  windowMs: 15 * 60 * 1000,
   max: 1000,
   message: { error: 'عدد كبير من الطلبات. يرجى المحاولة لاحقاً' },
   standardHeaders: true,

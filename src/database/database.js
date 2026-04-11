@@ -1,7 +1,7 @@
 const path = require('path');
 
 // Check if using PostgreSQL (production) or SQLite (local)
-const usePostgres = process.env.DATABASE_URL && process.env.NODE_ENV === 'production';
+const usePostgres = !!process.env.DATABASE_URL;
 
 class Database {
   constructor() {

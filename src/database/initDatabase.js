@@ -6,8 +6,7 @@ async function initializeDatabase() {
   try {
     console.log('Initializing database...');
 
-    const isPostgres = process.env.DATABASE_URL && process.env.NODE_ENV === 'production';
-
+    const isPostgres = !!process.env.DATABASE_URL;
     // Create Admin table
     if (isPostgres) {
       await db.run(`

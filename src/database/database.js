@@ -11,13 +11,31 @@ class Database {
 
   async connect() {
     if (this.isPostgres) {
-      // PostgreSQL connection
+      // PostgreSQL connection with simple retry logic
       const { Pool } = require('pg');
       this.db = new Pool({
         connectionString: process.env.DATABASE_URL,
-        ssl: { rejectUnauthorized: false }
+        ssl: { rejectUnauthorized: false },
+        connectionTimeoutMillis: 5000, // 5 seconds timeout
       });
-      console.log('Connected to PostgreSQL database');
+
+      // Verification with retry
+      let retries = 5;
+      while (retries > 0) {
+        try {
+          await this.db.query('SELECT 1');
+          console.log('✓ Successfully connected to PostgreSQL database');
+          return;
+        } catch (err) {
+          retries--;
+          if (retries === 0) {
+            console.error('Final attempt to connect to PostgreSQL failed:', err.message);
+            throw err;
+          }
+          console.log(`PostgreSQL connection failed, retrying in 3s... (${retries} retries left)`);
+          await new Promise(res => setTimeout(res, 3000));
+        }
+      }
     } else {
       // SQLite connection
       const sqlite3 = require('sqlite3').verbose();

@@ -36,6 +36,19 @@ const upload = multer({
   }
 });
 
+// Configure multer for PDF uploads
+const pdfUpload = multer({
+  storage: localUploadStorage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files are allowed'));
+    }
+  }
+});
+
 // PUBLIC: Get lessons by unit ID
 router.get('/unit/:unitId', async (req, res) => {
   try {
@@ -281,7 +294,6 @@ router.put('/:id', authenticateToken, async (req, res) => {
     // Handle videos: delete old ones and insert new ones
     if (videos && Array.isArray(videos) && videos.length > 0) {
       try {
-        // Delete old videos
         try {
           await db.run('DELETE FROM videos WHERE lesson_id = ?', [id]);
         } catch (delErr) {
@@ -290,7 +302,6 @@ router.put('/:id', authenticateToken, async (req, res) => {
           }
         }
 
-        // Insert new videos
         for (let i = 0; i < videos.length; i++) {
           const v = videos[i];
           if (v.video_url) {
@@ -308,7 +319,6 @@ router.put('/:id', authenticateToken, async (req, res) => {
     // Handle images: delete old ones and insert new ones
     if (images && Array.isArray(images) && images.length > 0) {
       try {
-        // Delete old images
         try {
           await db.run('DELETE FROM images WHERE lesson_id = ?', [id]);
         } catch (delErr) {
@@ -317,7 +327,6 @@ router.put('/:id', authenticateToken, async (req, res) => {
           }
         }
 
-        // Insert new images
         for (let i = 0; i < images.length; i++) {
           const img = images[i];
           if (img.image_path) {
@@ -343,7 +352,6 @@ router.put('/:id', authenticateToken, async (req, res) => {
           }
         }
 
-        // Insert new files
         for (let i = 0; i < files.length; i++) {
           const f = files[i];
           if (f.url) {
@@ -388,6 +396,23 @@ router.post('/upload-image', authenticateToken, upload.single('image'), async (r
   }
 });
 
+// ADMIN: Upload PDF
+router.post('/upload-pdf', authenticateToken, pdfUpload.single('pdf'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'لم يتم توفير ملف PDF', code: 'NO_FILE' });
+    }
+    const publicPath = `/uploads/${req.file.filename}`;
+    res.json({ pdfPath: publicPath });
+  } catch (error) {
+    console.error('[ERROR] PDF upload failed:', error);
+    res.status(500).json({
+      error: 'فشل تحميل الملف',
+      code: 'UPLOAD_ERROR'
+    });
+  }
+});
+
 // ADMIN: Delete lesson
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {
@@ -423,7 +448,6 @@ router.get('/:lessonId/questions', async (req, res) => {
       'SELECT id, lesson_id, question_text, option_a, option_b, option_c, option_d, display_order FROM questions WHERE lesson_id = ? ORDER BY display_order ASC',
       [lessonId]
     );
-    // Note: correct_answer is NOT included for students
     res.json(questions || []);
   } catch (error) {
     console.error('Error fetching questions:', error);
@@ -490,7 +514,6 @@ router.post('/:lessonId/questions', authenticateToken, async (req, res) => {
     const lessonId = parsed.value;
     const { question_text, option_a, option_b, option_c, option_d, correct_answer } = req.body;
 
-    // Validation
     if (!question_text || !option_a || !option_b || !option_c || !option_d || !correct_answer) {
       return res.status(400).json({ error: 'جميع الحقول مطلوبة' });
     }
@@ -499,7 +522,6 @@ router.post('/:lessonId/questions', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'الإجابة الصحيحة يجب أن تكون A أو B أو C أو D' });
     }
 
-    // Get next display order
     const lastQuestion = await db.get(
       'SELECT MAX(display_order) as max_order FROM questions WHERE lesson_id = ?',
       [lessonId]
@@ -529,7 +551,6 @@ router.put('/:lessonId/questions/:questionId', authenticateToken, async (req, re
     const questionId = questionIdParsed.value;
     const { question_text, option_a, option_b, option_c, option_d, correct_answer } = req.body;
 
-    // Validation
     if (!question_text || !option_a || !option_b || !option_c || !option_d || !correct_answer) {
       return res.status(400).json({ error: 'جميع الحقول مطلوبة' });
     }

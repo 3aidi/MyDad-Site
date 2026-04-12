@@ -9,7 +9,6 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "build": "node scripts/cache-buster.js",
     "init-db": "node src/database/initDatabase.js",
     "ensure-tables": "node src/database/ensure-tables.js",
     "generate-secrets": "node generate-secrets.js"

@@ -178,27 +178,15 @@ app.use(cookieParser());
 app.use((req, res, next) => {
   const p = req.path.toLowerCase();
 
-  // If not prod, disable cache entirely to avoid development friction
+  // If not prod, disable cache entirely to avoid Ctrl+F5 issues
   if (!isProd) {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
-  } else {
-    // 1. HTML files and routes should never be cached to ensure users always get the latest index
-    if (p.endsWith('.html') || p === '/' || p.startsWith('/admin') || !p.includes('.')) {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
-    } 
-    // 2. Hashed static assets (e.g., styles.a1b2c3d4.css)
-    // We detect the hash pattern (8 hex characters)
-    else if (p.match(/\.[a-f0-9]{8}\.(css|js|png|jpg|jpeg|gif|ico|svg|woff2?)$/)) {
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    }
-    // 3. Regular static assets (non-hashed)
-    else if (p.match(/\.(css|js|png|jpg|jpeg|gif|ico|svg|woff2?)$/)) {
-      res.setHeader('Cache-Control', 'public, max-age=86400'); // 1 day
-    }
+  } else if (p.endsWith('.html') || p === '/' || p.startsWith('/admin')) {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  } else if (p.match(/\.(css|js|png|jpg|jpeg|gif|ico|svg|woff2?)$/)) {
+    res.setHeader('Cache-Control', 'public, max-age=604800');
   }
 
   next();

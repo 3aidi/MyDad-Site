@@ -1112,11 +1112,11 @@ window.addFileField = function (fileData = { file_type: 'pdf', url: '', title: '
   fileBlock.style.cssText = 'background: #f8fafc; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #e2e8f0;';
   const currentUrl = fileData.url || '';
   fileBlock.innerHTML = `
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"><label style="font-weight: 600;">الملف ${index + 1} (PDF / PPTX)</label><button type="button" class="btn btn-danger btn-xs" data-action="remove-file-block">حذف</button></div>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"><label style="font-weight: 600;">الملف المرفق ${index + 1}</label><button type="button" class="btn btn-danger btn-xs" data-action="remove-file-block">حذف</button></div>
     <input type="text" placeholder="عنوان الملف (مثال: ملخص الوحدة)..." value="${escapeHtml(fileData.title || '')}" class="file-title-input" style="width: 100%; padding: 0.5rem; margin-bottom: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px;">
     <div class="file-upload-section" style="margin-bottom: 0.5rem;">
       ${currentUrl ? `<div style="margin-bottom: 0.5rem; font-size: 0.9em; background: #e2e8f0; padding: 0.5rem; border-radius: 4px;"><a href="${currentUrl}" target="_blank">عرض الملف الحالي</a> ✓</div>` : ''}
-      <input type="file" accept=".pdf,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation" class="lesson-file-upload" data-block-id="${fieldId}" style="width: 100%; padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px;">
+      <input type="file" class="lesson-file-upload" data-block-id="${fieldId}" style="width: 100%; padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px;">
       <input type="hidden" class="file-url-input" value="${currentUrl}">
       <input type="hidden" class="file-type-input" value="${escapeHtml(fileData.file_type || 'pdf')}">
       <div class="file-upload-status" style="margin-top: 0.5rem; font-weight: bold; font-size: 0.9em;"></div>
@@ -1136,10 +1136,8 @@ window.uploadFileAjax = async function (file, blockId) {
   const urlInput = block.querySelector('.file-url-input');
   const typeInput = block.querySelector('.file-type-input');
   const titleInput = block.querySelector('.file-title-input');
-  const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf';
-  const isPptx = file.name.toLowerCase().endsWith('.pptx') || file.type === 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-  if (!isPdf && !isPptx) { showAlert('الرجاء اختيار ملف PDF أو PPTX صحيح', 'error'); if (statusDiv) statusDiv.textContent = '❌ صيغة ملف غير مدعومة'; return; }
-  typeInput.value = isPdf ? 'pdf' : 'pptx';
+  const ext = file.name.split('.').pop().toLowerCase();
+  typeInput.value = ext || 'file';
   if (!titleInput.value) titleInput.value = file.name;
   statusDiv.textContent = 'جارٍ رفع الملف إلى السحابة...';
   statusDiv.style.color = '#eab308';

@@ -143,7 +143,7 @@
           <p class="card-desc">لم تقم بفتح أي صف دراسي بعد. ابدأ من صفحة الصفوف الدراسية.</p>
           <div class="card-footer">
             <button class="btn btn-primary" type="button" data-navigate="/classes">
-              استعراض كل الصفوف
+              <i class="fas fa-th-large"></i> استعراض كل الصفوف
             </button>
           </div>
         </div>
@@ -167,8 +167,8 @@
               </div>
             </div>
             <div class="card-footer dashboard-continue-footer">
-              <button class="btn btn-secondary" type="button">
-                استئناف
+              <button class="btn btn-secondary btn-block" type="button">
+                <i class="fas fa-play"></i> استئناف
               </button>
             </div>
           </div>

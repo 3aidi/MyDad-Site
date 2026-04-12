@@ -73,7 +73,9 @@ class AppRouter {
         <i class="fas fa-triangle-exclamation" style="font-size: 4rem; color: var(--accent-rose); margin-bottom: 2rem;"></i>
         <h2>عذراً، حدث خطأ</h2>
         <p style="color: var(--text-muted); margin-bottom: 2rem;">${msg}</p>
-        <button class="nav-item active" style="margin: 0 auto; border: none; cursor: pointer;" onclick="router.navigate('/')">العودة للرئيسية</button>
+        <button class="btn btn-primary" style="margin: 0 auto;" onclick="router.navigate('/')">
+          <i class="fas fa-home"></i> العودة للرئيسية
+        </button>
       </div>
     `;
   }
@@ -144,11 +146,12 @@ function buildFileViewerUrl(rawUrl, type = 'pdf') {
 
   try {
     const encodedSrc = encodeURIComponent(url);
-    if (type === 'pptx') {
-      // Use Office Online Viewer for PPTX
+    const officeTypes = ['pptx', 'ppt', 'docx', 'doc', 'xlsx', 'xls'];
+    if (officeTypes.includes(type)) {
+      // Use Office Online Viewer for Office Docs
       return `https://view.officeapps.live.com/op/embed.aspx?src=${encodedSrc}`;
-    } else {
-      // Use Google Docs Viewer for PDFs as a stable fallback/previewer
+    } else if (type === 'pdf') {
+      // Use Google Docs Viewer for PDFs
       return `https://docs.google.com/viewer?url=${encodedSrc}&embedded=true`;
     }
   } catch (_) {
@@ -325,7 +328,7 @@ router.on('/class/:id', async (classId) => {
     app.innerHTML = `
       <div class="class-hub">
         <div class="animate-up">
-           <button class="nav-item" style="border:none; background:none; cursor:pointer; padding:0; margin-bottom:1rem;" data-navigate="/">
+           <button class="btn btn-secondary btn-sm" style="margin-bottom:1rem;" data-navigate="/">
               <i class="fas fa-arrow-right"></i> كل الصفوف
            </button>
            <h1 class="page-title">${escapeHtml(cls.name)}</h1>
@@ -389,7 +392,7 @@ router.on('/unit/:id', async (unitId) => {
     app.innerHTML = `
       <div class="unit-hub">
         <div class="animate-up">
-           <button class="nav-item" style="border:none; background:none; cursor:pointer;" data-navigate="/class/${unit.class_id}">
+           <button class="btn btn-secondary btn-sm" data-navigate="/class/${unit.class_id}">
               <i class="fas fa-arrow-right"></i> عودة للوحدات
            </button>
            <h1 class="page-title">${escapeHtml(unit.title)}</h1>
@@ -429,20 +432,41 @@ router.on('/lesson/:id', async (lessonId) => {
       `;
       
       lesson.files.forEach(file => {
-        const icon = file.file_type === 'pptx' ? 'fa-file-powerpoint' : 'fa-file-pdf';
-        const color = file.file_type === 'pptx' ? '#ea580c' : '#dc2626';
-        
-        // Use document viewers for the "Open" button to ensure they render correctly
-        let openUrl = file.url;
-        const viewerUrl = buildFileViewerUrl(file.url, file.file_type);
-        if (viewerUrl) openUrl = viewerUrl;
+        const type = String(file.file_type || 'file').toLowerCase();
+        let icon = 'fa-file';
+        let color = '#94a3b8';
 
-        const downloadUrl = getDownloadUrl(file.url);
+        const iconMap = {
+          'pdf': { icon: 'fa-file-pdf', color: '#dc2626' },
+          'pptx': { icon: 'fa-file-powerpoint', color: '#ea580c' },
+          'ppt': { icon: 'fa-file-powerpoint', color: '#ea580c' },
+          'docx': { icon: 'fa-file-word', color: '#2563eb' },
+          'doc': { icon: 'fa-file-word', color: '#2563eb' },
+          'xlsx': { icon: 'fa-file-excel', color: '#16a34a' },
+          'xls': { icon: 'fa-file-excel', color: '#16a34a' },
+          'zip': { icon: 'fa-file-archive', color: '#6366f1' },
+          'rar': { icon: 'fa-file-archive', color: '#6366f1' },
+          '7z': { icon: 'fa-file-archive', color: '#6366f1' },
+          'png': { icon: 'fa-file-image', color: '#8b5cf6' },
+          'jpg': { icon: 'fa-file-image', color: '#8b5cf6' },
+          'jpeg': { icon: 'fa-file-image', color: '#8b5cf6' },
+          'webp': { icon: 'fa-file-image', color: '#8b5cf6' },
+          'txt': { icon: 'fa-file-lines', color: '#64748b' },
+          'csv': { icon: 'fa-file-csv', color: '#10b981' }
+        };
+
+        if (iconMap[type]) {
+          icon = iconMap[type].icon;
+          color = iconMap[type].color;
+        }
+        
+        const viewerUrl = buildFileViewerUrl(file.url, type);
+        const downloadUrl = file.url || '#';
         
         mediaHTML += `
           <div style="background: white; border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
             <div style="display: flex; align-items: flex-start; gap: 1rem;">
-              <div style="font-size: 2rem; color: ${color};">
+              <div style="font-size: 2.2rem; min-width: 40px; text-align: center; color: ${color};">
                 <i class="fas ${icon}"></i>
               </div>
               <div style="flex: 1; overflow: hidden;">
@@ -451,10 +475,11 @@ router.on('/lesson/:id', async (lessonId) => {
               </div>
             </div>
             <div style="display: flex; gap: 0.5rem; margin-top: auto;">
-              <a href="${escapeHtml(openUrl)}" target="_blank" class="btn btn-primary" style="flex: 1; padding: 0.5rem; display: flex; justify-content: center; align-items: center; gap: 0.5rem; font-size: 0.9rem; text-decoration: none;">
+              ${viewerUrl ? `
+              <a href="${escapeHtml(viewerUrl)}" target="_blank" class="btn btn-primary btn-sm" style="flex: 1;">
                 <i class="fas fa-external-link-alt"></i> فتح
-              </a>
-              <a href="${escapeHtml(downloadUrl)}" download class="btn btn-secondary" style="flex: 1; padding: 0.5rem; display: flex; justify-content: center; align-items: center; gap: 0.5rem; font-size: 0.9rem; border: 1px solid var(--border-light); color: var(--text-dark); text-decoration: none; background: #f8fafc;">
+              </a>` : ''}
+              <a href="${escapeHtml(downloadUrl)}" download class="btn btn-secondary btn-sm" style="flex: 1;">
                 <i class="fas fa-download"></i> تحميل
               </a>
             </div>
@@ -490,7 +515,7 @@ router.on('/lesson/:id', async (lessonId) => {
       <div class="lesson-reader">
         <div class="reader-container animate-up">
            <div class="reader-header">
-             <button class="nav-item" style="border:none; background:none; cursor:pointer; padding:0; margin-bottom: 2rem;" data-navigate="/unit/${lesson.unit_id}">
+             <button class="btn btn-secondary btn-sm" style="margin-bottom: 2rem;" data-navigate="/unit/${lesson.unit_id}">
                 <i class="fas fa-arrow-right"></i> عودة للوحدة
              </button>
              <h1 style="font-size: 2.5rem; color: var(--text-main); line-height: 1.4;">${escapeHtml(lesson.title)}</h1>

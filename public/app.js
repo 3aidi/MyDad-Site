@@ -430,7 +430,7 @@ router.on('/lesson/:id', async (lessonId) => {
         </h3>
         <div style="display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
       `;
-      
+
       lesson.files.forEach(file => {
         const type = String(file.file_type || 'file').toLowerCase();
         let icon = 'fa-file';
@@ -459,10 +459,10 @@ router.on('/lesson/:id', async (lessonId) => {
           icon = iconMap[type].icon;
           color = iconMap[type].color;
         }
-        
+
         const viewerUrl = buildFileViewerUrl(file.url, type);
         const downloadUrl = file.url || '#';
-        
+
         mediaHTML += `
           <div style="background: white; border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
             <div style="display: flex; align-items: flex-start; gap: 1rem;">
@@ -486,29 +486,52 @@ router.on('/lesson/:id', async (lessonId) => {
           </div>
         `;
       });
-      
+
       mediaHTML += `</div></div>`;
     }
 
     if (lesson.videos?.length) {
       mediaHTML += lesson.videos.map(v => {
         const vidId = extractYouTubeId(v.video_url);
-        return vidId ? `
-          <div style="margin: 2rem 0; border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-lg);">
-            <iframe width="100%" height="450" src="https://www.youtube.com/embed/${vidId}" frameborder="0" allowfullscreen></iframe>
-            ${v.explanation ? `<div style="padding: 1.5rem; background: #fff; border-top: 1px solid #eee;">${escapeHtml(v.explanation)}</div>` : ''}
-          </div>
-        ` : '';
+        if (!vidId) return '';
+
+        const position = v.position || 'bottom';
+        const explanationHtml = v.explanation ? `<div class="media-text-content" style="padding: 1.5rem; background: #fff; flex: 1;">${escapeHtml(v.explanation)}</div>` : '';
+        const videoIframe = `
+          <div style="flex: 2; min-width: 300px; line-height: 0;">
+            <iframe width="100%" height="450" 
+              src="https://www.youtube-nocookie.com/embed/${vidId}?origin=${window.location.origin}&rel=0" 
+              frameborder="0" 
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+              referrerpolicy="strict-origin-when-cross-origin" 
+              allowfullscreen></iframe>
+          </div>`;
+
+        let layoutStyle = 'margin: 2rem 0; border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-lg); background: #fff; display: flex;';
+        if (position === 'top') layoutStyle += ' flex-direction: column-reverse;';
+        else if (position === 'side') layoutStyle += ' flex-direction: row; flex-wrap: wrap; align-items: stretch;';
+        else layoutStyle += ' flex-direction: column;';
+
+        return `<div style="${layoutStyle}">${videoIframe}${explanationHtml}</div>`;
       }).join('');
     }
 
     if (lesson.images?.length) {
-      mediaHTML += lesson.images.map(img => `
-        <div style="margin: 2rem 0;">
-          <img src="${img.image_path}" style="width: 100%; border-radius: var(--radius-lg); box-shadow: var(--shadow-md);">
-          ${img.caption ? `<p style="text-align:center; color: var(--text-muted); margin-top: 1rem;">${escapeHtml(img.caption)}</p>` : ''}
-        </div>
-      `).join('');
+      mediaHTML += lesson.images.map(img => {
+        const position = img.position || 'bottom';
+        const captionHtml = img.caption ? `<div class="media-text-content" style="padding: 1.25rem; background: #fff; flex: 1;">${escapeHtml(img.caption)}</div>` : '';
+        const imageElement = `
+          <div style="flex: 2; min-width: 300px; line-height: 0;">
+            <img src="${img.image_path}" style="width: 100%; display: block;">
+          </div>`;
+
+        let layoutStyle = 'margin: 2rem 0; border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-md); background: #fff; display: flex;';
+        if (position === 'top') layoutStyle += ' flex-direction: column-reverse;';
+        else if (position === 'side') layoutStyle += ' flex-direction: row; flex-wrap: wrap; align-items: center;';
+        else layoutStyle += ' flex-direction: column;';
+
+        return `<div style="${layoutStyle}">${imageElement}${captionHtml}</div>`;
+      }).join('');
     }
 
     app.innerHTML = `

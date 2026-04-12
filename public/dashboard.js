@@ -103,147 +103,145 @@
     return 'طالبنا العزيز';
   }
 
-  function buildContinueLearning(classes, units) {
-    const recentClassIds = StudentActivity.getRecentClassIds(3);
-    if (!recentClassIds.length) return [];
+  function getLastVisitedLesson(units) {
+    const raw = localStorage.getItem(VISITED_LESSONS_KEY);
+    const lessons = safeJsonParse(raw, []);
+    if (!lessons.length) return null;
 
-    const byId = new Map(classes.map((c) => [c.id, c]));
-    const result = [];
-
-    for (const classId of recentClassIds) {
-      const cls = byId.get(classId);
-      if (!cls) continue;
-      const classUnits = units.filter((u) => u.class_id === cls.id);
-      const visitedUnits = StudentActivity.getVisitedUnitsForClass(cls.id);
-      const totalUnits = classUnits.length || 1;
-      const visitedCount = visitedUnits.length;
-      const progress = Math.max(0, Math.min(100, Math.round((visitedCount / totalUnits) * 100)));
-
-      result.push({
-        cls,
-        totalUnits,
-        visitedCount,
-        progress
-      });
-    }
-
-    return result;
+    // Most recent first
+    const last = lessons.sort((a, b) => new Date(b.visitedAt) - new Date(a.visitedAt))[0];
+    return last;
   }
 
-  function pickFeaturedClasses(classes, limit = 6) {
-    if (classes.length <= limit) return classes.slice();
-    return classes.slice(0, limit);
-  }
-
-  function renderContinueCards(items, units) {
-    if (!items.length) {
-      return `
-        <div class="premium-card dashboard-empty-card">
-          <h3 class="card-title">ابدأ رحلتك التعليمية</h3>
-          <p class="card-desc">لم تقم بفتح أي صف دراسي بعد. ابدأ من صفحة الصفوف الدراسية.</p>
-          <div class="card-footer">
-            <button class="btn btn-primary" type="button" data-navigate="/classes">
-              <i class="fas fa-th-large"></i> استعراض كل الصفوف
-            </button>
-          </div>
-        </div>
-      `;
-    }
-
-    return items
-      .map((item) => {
-        const { cls, progress } = item;
-        const safeProgress = isNaN(progress) ? 0 : progress;
-        return `
-          <div class="premium-card dashboard-continue-card" data-navigate="/class/${cls.id}">
-            <div class="card-icon"><i class="fas fa-play-circle"></i></div>
-            <h3 class="card-title">${escapeHtml(cls.name)}</h3>
-            <div class="dashboard-progress-row">
-              <div class="dashboard-progress-text">
-                <span>${safeProgress}% مكتمل</span>
-              </div>
-              <div class="dashboard-progress-bar">
-                <div class="dashboard-progress-bar-inner" style="width: ${safeProgress}%;"></div>
-              </div>
-            </div>
-            <div class="card-footer dashboard-continue-footer">
-              <button class="btn btn-secondary btn-block" type="button">
-                <i class="fas fa-play"></i> استئناف
-              </button>
-            </div>
-          </div>
-        `;
-      })
-      .join('');
-  }
-
-  function renderQuickStats(classes, units) {
+  function renderHero(classes, units) {
+    const lastLesson = getLastVisitedLesson(units);
+    const studentName = getStudentDisplayName();
     const totalClasses = classes.length;
-    const totalUnits = units.length;
-    const visitedUnitsCount = StudentActivity.getVisitedUnits().length;
     const visitedLessonsCount = StudentActivity.getVisitedLessons().length;
 
+    let actionButton = `
+      <button class="dashboard-hero-action" data-navigate="/classes">
+        <i class="fas fa-compass"></i> استكشف المناهج
+      </button>`;
+
+    if (lastLesson) {
+      actionButton = `
+        <button class="dashboard-hero-action" data-navigate="/lesson/${lastLesson.lessonId}">
+          <i class="fas fa-play"></i> استكمال التعلم
+        </button>`;
+    }
+
     return `
-      <div class="dashboard-stats-grid">
-        <div class="premium-card dashboard-stat-card">
-          <p class="dashboard-stat-label">الصفوف في خطتك</p>
-          <h2 class="dashboard-stat-value">${totalClasses}</h2>
+      <section class="dashboard-hero animate-premium">
+        <div class="dashboard-hero-content">
+          <div class="dashboard-hero-badge">
+            <i class="fas fa-bolt"></i> نظرة عامة على نشاطك
+          </div>
+          <h1 class="dashboard-hero-title">مرحباً بك، ${studentName}</h1>
+          <p class="dashboard-hero-subtitle">لديك خطة دراسية نشطة. استمر في المتابعة لتحقيق أفضل النتائج التعليمية.</p>
+          ${actionButton}
         </div>
-        <div class="premium-card dashboard-stat-card">
-          <p class="dashboard-stat-label">إجمالي الوحدات</p>
-          <h2 class="dashboard-stat-value">${totalUnits}</h2>
+
+        <div class="dashboard-hero-stats">
+          <div class="hero-stat-glass-card">
+            <div class="hero-stat-icon"><i class="fas fa-graduation-cap"></i></div>
+            <div class="hero-stat-info">
+              <span class="hero-stat-value">${totalClasses}</span>
+              <span class="hero-stat-label">الصفوف الدراسية</span>
+            </div>
+          </div>
+          <div class="hero-stat-glass-card">
+            <div class="hero-stat-icon"><i class="fas fa-check-double"></i></div>
+            <div class="hero-stat-info">
+              <span class="hero-stat-value">${visitedLessonsCount}</span>
+              <span class="hero-stat-label">الدروس المكتملة</span>
+            </div>
+          </div>
         </div>
-        <div class="premium-card dashboard-stat-card">
-          <p class="dashboard-stat-label">وحدات تمت زيارتها</p>
-          <h2 class="dashboard-stat-value">${visitedUnitsCount}</h2>
+      </section>
+    `;
+  }
+
+  function renderBentoGrid(classes, units) {
+    if (!classes.length) return '<p>لا توجد صفوف مضافة حالياً.</p>';
+
+    const featured = classes[0]; // Take the first one as featured
+    const others = classes.slice(1, 5); // Take up to 4 more
+
+    let html = '<div class="bento-grid animate-premium" style="animation-delay: 0.2s;">';
+
+    // 1. Featured spotlight item (Large)
+    html += `
+      <div class="bento-item bento-featured" data-navigate="/class/${featured.id}">
+        <div class="bento-card-header">
+          <span class="bento-label">ترشيح المنصة</span>
+          <div class="bento-icon-box"><i class="fas fa-award"></i></div>
         </div>
-        <div class="premium-card dashboard-stat-card">
-          <p class="dashboard-stat-label">دروس تمت زيارتها</p>
-          <h2 class="dashboard-stat-value">${visitedLessonsCount}</h2>
+        <div class="featured-spotlight">
+          <div class="spotlight-info">
+            <h2 class="bento-title">${escapeHtml(featured.name)}</h2>
+            <p class="bento-desc">ابدأ في استكشاف هذا الصف التعليمي المتميز. يحتوي على مجموعة من الوحدات والدروس المنسقة بعناية.</p>
+            <div class="spotlight-meta">
+              <span class="meta-pill"><i class="fas fa-layer-group"></i> ${units.filter(u => u.class_id === featured.id).length} وحدات</span>
+              <span class="meta-pill"><i class="fas fa-clock"></i> محتوى متكامل</span>
+            </div>
+          </div>
+          <div style="margin-top: auto;">
+             <button class="btn btn-primary">ابدأ الآن <i class="fas fa-arrow-left"></i></button>
+          </div>
         </div>
       </div>
     `;
+
+    // 2. Regular bento items
+    others.forEach((cls, idx) => {
+      const unitCount = units.filter(u => u.class_id === cls.id).length;
+      const icons = ['graduation-cap', 'book-open', 'atom', 'brain'];
+      const icon = icons[idx % icons.length];
+
+      html += `
+        <div class="bento-item" data-navigate="/class/${cls.id}">
+          <div class="bento-card-header">
+            <div class="bento-icon-box" style="background: rgba(37, 99, 235, 0.05);"><i class="fas fa-${icon}"></i></div>
+          </div>
+          <h3 class="bento-title" style="font-size: 1.15rem;">${escapeHtml(cls.name)}</h3>
+          <p class="bento-desc" style="font-size: 0.8rem;">${unitCount} وحدات تعليمية</p>
+        </div>
+      `;
+    });
+
+    // 3. Stats bento (Wide)
+    const visitedUnits = StudentActivity.getVisitedUnits().length;
+    html += `
+      <div class="bento-item bento-wide animate-premium" style="display: flex; align-items: center; justify-content: space-between; background: #0f172a; color: white; border: 1px solid rgba(255,255,255,0.05); padding: 2rem;">
+        <div style="text-align: right;">
+          <h3 class="bento-title" style="color: white; margin-bottom: 0.5rem;">إحصائياتك</h3>
+          <p class="bento-desc" style="color: rgba(255,255,255,0.6); font-size: 0.95rem;">لقد أنهيت ${visitedUnits} وحدات دراسية بنجاح.</p>
+        </div>
+        <div class="hero-stat-icon" style="width: 60px; height: 60px; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; border: 1px solid rgba(56, 189, 248, 0.3);">
+            <span style="font-weight: 900;">${visitedUnits}</span>
+        </div>
+      </div>
+    `;
+
+    html += '</div>';
+    return html;
   }
 
   function renderDashboard(appEl, data) {
     const classes = Array.isArray(data.classes) ? data.classes : [];
     const units = Array.isArray(data.units) ? data.units : [];
 
-    const studentName = getStudentDisplayName();
-    const continueItems = buildContinueLearning(classes, units);
-    const featured = pickFeaturedClasses(classes, 6);
-    const featuredHtml = renderClassCards(featured, units);
-
     appEl.innerHTML = `
       <div class="dashboard">
-        <section class="dashboard-section dashboard-welcome animate-up">
-          <div class="dashboard-welcome-main">
-            <h1 class="page-title">مرحباً بك، <span class="dashboard-student-name">${studentName}</span></h1>
-            <p class="page-subtitle">تابع رحلتك التعليمية، واستكشف الصفوف والدروس بسهولة من مكان واحد.</p>
-          </div>
-          <div class="dashboard-welcome-stats">
-            ${renderQuickStats(classes, units)}
-          </div>
-        </section>
+        ${renderHero(classes, units)}
 
-        <section class="dashboard-section animate-up">
+        <section class="dashboard-section">
           <div class="dashboard-section-header">
-            <h2><i class="fas fa-arrow-rotate-right"></i> متابعة التعلم</h2>
-            <p>استكمل من حيث توقفت مؤخراً.</p>
+            <h2 style="font-size: 1.5rem;"><i class="fas fa-grid-2"></i> استكشف رحلتك التعليمية</h2>
+            <p>اختر ما تريد تعلمه اليوم من بين صفوفك الدراسية المتاحة.</p>
           </div>
-          <div class="cards-grid dashboard-continue-grid">
-            ${renderContinueCards(continueItems, units)}
-          </div>
-        </section>
-
-        <section class="dashboard-section animate-up">
-          <div class="dashboard-section-header">
-            <h2><i class="fas fa-star"></i> صفوف مقترحة</h2>
-            <p>مجموعة مختارة من الصفوف للبدء السريع.</p>
-          </div>
-          <div class="cards-grid">
-            ${featuredHtml || '<p>لا توجد صفوف مضافة حالياً.</p>'}
-          </div>
+          ${renderBentoGrid(classes, units)}
         </section>
       </div>
     `;

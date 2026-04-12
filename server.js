@@ -144,6 +144,7 @@ const corsOptions = {
 if (isProd) app.use(cors(corsOptions));
 
 app.use(helmet({
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
   contentSecurityPolicy: isProd ? {
     directives: {
       defaultSrc: ["'self'"],
@@ -152,7 +153,7 @@ app.use(helmet({
       fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
       imgSrc: ["'self'", "data:", "https:", "http:"],
       connectSrc: ["'self'", "https://api.cloudinary.com"],
-      frameSrc: ["'self'", "https://www.youtube.com", "https://view.officeapps.live.com", "https://res.cloudinary.com"]
+      frameSrc: ["'self'", "https://www.youtube.com", "https://www.youtube-nocookie.com", "https://view.officeapps.live.com", "https://res.cloudinary.com"]
     }
   } : false,
   crossOriginEmbedderPolicy: false

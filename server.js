@@ -178,10 +178,15 @@ app.use(cookieParser());
 app.use((req, res, next) => {
   const p = req.path.toLowerCase();
 
-  if (p.endsWith('.html') || p === '/' || p.startsWith('/admin')) {
+  // If not prod, disable cache entirely to avoid Ctrl+F5 issues
+  if (!isProd) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  } else if (p.endsWith('.html') || p === '/' || p.startsWith('/admin')) {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   } else if (p.match(/\.(css|js|png|jpg|jpeg|gif|ico|svg|woff2?)$/)) {
-    res.setHeader('Cache-Control', `public, max-age=${isProd ? 604800 : 0}`);
+    res.setHeader('Cache-Control', 'public, max-age=604800');
   }
 
   next();
